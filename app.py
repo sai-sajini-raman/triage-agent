@@ -5,8 +5,12 @@ from azure.core.credentials import AzureKeyCredential
 from dotenv import load_dotenv
 import os
 
-# with st.chat_message(name="assistant"):
-#     st.write("👋🏾 Hello there! How can I assist you today?")
+import pandas as pd
+
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.schema import Document
+
 
 st.title("Triage Agent")
 with st.chat_message(name="assistant"):
@@ -16,14 +20,46 @@ with st.chat_message(name="assistant"):
 # Load API key from .env file
 load_dotenv()
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-print("GITHUB_TOKEN loaded:", repr(GITHUB_TOKEN)) 
+# print("GITHUB_TOKEN loaded:", repr(GITHUB_TOKEN)) 
+
+# --- load docs & build index, including excel
+@st.cache_resource
+def build_index():
+    docs = SimpleDirectoryReader("docs").load_data()
+    excel_docs = []
+    excel_path = "MAL-Food-SC.xlsx"
+    if os.path.exists(excel_path):
+        df = pd.read_excel(excel_path)
+        excel_docs = [
+            Document(text=row.to_json())
+            for _, row in df.iterrows()
+        ]
+    all_docs = docs + excel_docs
+
+    # Create the embedding model using HuggingFace
+    embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # Pass the embed_model to the index
+    index = VectorStoreIndex.from_documents(all_docs, embed_model=embed_model)
+    return index
+index = build_index()
+
+# --- query llamaindex & get context
+def get_relevant_context(query):
+    retriever = index.as_retriever()
+    nodes = retriever.retrieve(query)
+    context = "\n".join([node.text for node in nodes])
+    print("Retrieved context for query:", query)
+    print(context)
+    return context
 
 client = ChatCompletionsClient(
     endpoint="https://models.github.ai/inference",
     credential=AzureKeyCredential(GITHUB_TOKEN),
 )
 
-def call_github_llm(prompt, max_tokens=2048):
+# --- calling with context
+def call_github_llm(prompt, context="", max_tokens=100):
+    rag_prompt = f" Here is the data given as Context:\n{context}\nUse the above context to answer the following question. Strictly rely on only the given context data to answer the question. \n\nQuestion: {prompt}"
     response = client.complete(
         # messages=[UserMessage(prompt)],
         messages=[
@@ -36,7 +72,6 @@ def call_github_llm(prompt, max_tokens=2048):
     )
     for chunk in response:
         yield chunk
-
 
 
 # Initialize chat history
@@ -54,13 +89,15 @@ if prompt:= st.chat_input("Type your message here..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    # --- RAG: Retrieve context from docs,excel
+    context = get_relevant_context(prompt)
+   
 
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
-        for response in call_github_llm(prompt):
+        for response in call_github_llm(prompt, context):
             full_response += response.choices[0].delta.get("content", "")
             message_placeholder.markdown(full_response + "▌")
         message_placeholder.markdown(full_response)
