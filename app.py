@@ -9,6 +9,8 @@ import os
 #     st.write("👋🏾 Hello there! How can I assist you today?")
 
 st.title("Triage Agent")
+with st.chat_message(name="assistant"):
+    st.write("👋🏾 Hello there! How can I assist you today?")
 
 
 # Load API key from .env file
