@@ -1,0 +1,6 @@
+streamlit==1.24.1
+azure-ai-inference
+azure-core
+python-dotenv
+llama-index
+openpyxl
