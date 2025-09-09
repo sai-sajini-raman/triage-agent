@@ -86,6 +86,7 @@ for message in st.session_state.messages:
 # React to user input
 if prompt:= st.chat_input("Type your message here..."):
     # Display user message in chat message container
+    st.session_state.messages.append({"role": "user", "content": "You are a helpful assistant, who helps to triage incidents within an organization. You should ask relevant questions to gather information about the incident, such as its severity, impact, affected systems, etc,. Based on the information provided, you should categorize the incident and assign a priority level (e.g., low, medium, high) to indicate the urgency of the incident. Finally, you should suggest appropriate next steps for resolving the incident, such as escalating it to a higher-level support team or providing specific troubleshooting instructions, etc,."})
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
